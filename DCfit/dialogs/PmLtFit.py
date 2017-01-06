@@ -37,7 +37,7 @@ class Window(QtGui.QDialog):
         fitwiz = qti.app.table('fitWizard')
         fitwiz.showMaximized()
         fitwiz.showNormal()
-        qti.app.updateLog('Start')
+        qti.app.resultsLog().append('Dose curves GUI started \n ')
 
     def initUI(self):
 
@@ -81,9 +81,9 @@ class Window(QtGui.QDialog):
         bb1 = QtGui.QPushButton('Delete Fit Graphs', self)
         bb1.clicked.connect(bp.deleteFitGraphs)
         bbox.addWidget(bb1)
-        bb2 = QtGui.QPushButton('Delete Fit Tables', self)
-        bb2.clicked.connect(bp.deleteFitTables)
-        bbox.addWidget(bb2)
+        # bb2 = QtGui.QPushButton('Delete Fit Tables', self)
+        # bb2.clicked.connect(bp.deleteFitTables)
+        # bbox.addWidget(bb2)
         bb3 = QtGui.QPushButton('Delete Fit Graphs and Tables', self)
         bb3.clicked.connect(bp.deleteFitGraphsTables)
         bbox.addWidget(bb3)
@@ -129,23 +129,12 @@ class Window(QtGui.QDialog):
                 ret = msgBox.exec_()
             self.tablename = name
             if self.mode == 'N':
-                qti.app.updateLog('N-model fit started \n ')
-                bp.fitPmLtN(name)
+                qti.app.resultsLog().append('N-model fit started \n ')
+                bp.fitPmLt(name, "N")
             elif self.mode == 'NU':
-                qti.app.updateLog('NU-model fit started \n ')
-                bp.fitPmLtNU(name)
-        '''
-        elif self.m.text() == 'Logarithmic differentiate':
-                if self.mode == 'N':
-                        bp.logDerivatN()
-                elif self.mode == 'NU':
-                        bp.logDerivatNU()
-        elif self.m.text() == 'Differentiation parameters':
-                if self.mode == 'N':
-                        bp.derivatParamsN()
-                elif self.mode == 'NU':
-                        bp.derivatParamsNU()
-        '''
+                qti.app.resultsLog().append('NU-model fit started \n ')
+                bp.fitPmLt(name, 'NU')
+        
 win = Window()
 win.move(600, 400)
 

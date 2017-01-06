@@ -111,7 +111,7 @@ class Window(QtGui.QDialog):
         self.show()
 
     def noiseAmplitude(self, text):
-        qti.app.resultsLog().append(text)
+       # qti.app.resultsLog().append(text)
         self.amplitude = float(text)
 
     def onActivated(self, text):
@@ -124,23 +124,23 @@ class Window(QtGui.QDialog):
             elif not bp.objectMessanger('SimParam', 'Table'):
                 return
             if self.mode == 'N':
-                bp.generPmLtN(self.amplitude)
+                bp.generPmLt(self.amplitude, 'N')
             elif self.mode == 'NU':
-                bp.generPmLtNU(self.amplitude)
+                bp.generPmLt(self.amplitude, 'NU')
         elif self.m.text() == 'Logarithmic differentiate':
             if self.mode == 'N':
-                bp.logDerivatN()
+                bp.logDerivat('N')
             elif self.mode == 'NU':
-                bp.logDerivatNU()
+                bp.logDerivat('NU')
         elif self.m.text() == 'Differentiation parameters':
             if not bp.objectMessanger('initParams', 'Table'):
                 return
             elif not bp.objectMessanger('SimParam', 'Table'):
                 return
             if self.mode == 'N':
-                bp.derivatParamsN()
+                bp.derivatParams('N')
             elif self.mode == 'NU':
-                bp.derivatParamsNU()
+                bp.derivatParams('NU')
 
 win = Window()
 win.move(600, 400)

@@ -29,10 +29,10 @@ import qti
 #  @param Lt Float : value of ligand concentration
 #  @param dict Dictionary : Pm function arguments
 #  @param param="none" String : name of parameter from SimParam table
-#  @param SimParam=qti.app.table("SimParam")) Qti object : table with non-constant parameters values
+#  @param SimParam Dict : dictionary with varied parameter values
 #  @return Float : value of protein/ligand solution melting pressure
 #  @return Numpy 2D Array : values of protein/ligand solution melting pressure, if input is array
-def PmLtFullSim(Lt, dict, param="none", SimParam=qti.app.table("SimParam"), other_params={}):
+def PmLtFullSim(Lt, dict, param="none", SimParam={}, other_params={}):
 
     Pms = []
     PmAll = []
@@ -54,7 +54,6 @@ def PmLtFullSim(Lt, dict, param="none", SimParam=qti.app.table("SimParam"), othe
             answer = np.array(PmAll)
             return answer
     else:
-        SimParam = bp.simParamDict(SimParam)
         for i in SimParam[param]:
             Pms = []
             if param != "none":
@@ -179,6 +178,7 @@ def LtUpper(params, x, i=0, other_params={}):
         a = params.valuesdict()
     except:
         a = params
+    #qti.app.resultsLog().append("dicLtUpper =" + str(a)) 
     try:
         Pr =            other_params['Pr']
         R =             other_params['R']
@@ -204,7 +204,7 @@ def LtUpper(params, x, i=0, other_params={}):
     DbnG =          (-1*log(Kbn)*R*T)
     Kbpower = -((DbnG + DbnV*(x-Pr)+(DbnBeta/2)*(x-Pr)*(x-Pr))/(R*T))
     Kupower = -((DuG + DuV*(x-Pr)+(DuBeta/2)*(x-Pr)*(x-Pr))/(R*T))
-    #qti.app.resultsLog().append("Kbnpower = %s" %Kbnpower)
+        #qti.app.updateLog("Kbnpower = %s" %x + '\n')
     #qti.app.resultsLog().append("Kbupower = %s" %Kbupower)
     #qti.app.resultsLog().append("Kupower = %s" %Kupower)
     #To avoid math overflow
@@ -241,6 +241,7 @@ def LtUpper(params, x, i=0, other_params={}):
             model = exp(PowerLimit)
             #qti.app.resultsLog().append("Pm errr for Lt = %s" %x)
         #qti.app.resultsLog().append("model4= %s" %model)
+   
     return model
 #                                                                                                               Sigmoidal function                                                      #
 
@@ -277,30 +278,7 @@ def Pm_low(dict, i=0, other_params = {}):
 
 
 
-## Function for one Gaus model.
-#  @param dict Dictionary : Pm function arguments
-#  @param dict['xMin'] Float : minimum value
-#  @param dict['xMax'] Float : maximum value
-#  @param dict['rate'] Int :  sample rate
-#  @param scale='log10' String : step scale
-#  @return numpy 1D array : list of steped values
-def xGen(dict, scale = 'log10'):
-    xMin = dict['Lt_min']
-    xMax = dict['Lt_max']
-    rate = dict['Lt_range']
-    answer = []
-    b1 = log(xMin, 10)
-    b2 = log(xMax, 10)
-    if scale == 'log10':
-        for i in range(int(rate)):
-            value = 10 ** (b1 + (i) * (b2 - b1) / (rate - 1.))
-            answer.append(value)
-    elif scale == 'linear':
-        for i in range(rate):
-            value = xMin + i*(xMax-xMin)/(rate-1.)
-            answer.append(value)
-    answer = np.array(answer)
-    return answer
+
 
 
 
@@ -342,16 +320,16 @@ def PmLtFull(Lt, params, i=0, other_params={}):
 #  @param Lt Float : value of ligand concentration
 #  @param dict Dictionary : Pm function arguments
 #  @param param="none" String : name of parameter from SimParam table
-#  @param SimParam=qti.app.table("SimParam")) Qti object : table with non-constant parameters values
+#  @param SimParam Dict : dictionary with varied parameters values
 #  @return Float : value of protein/ligand solution melting pressure, if input is float
 #  @return Numpy 2D Array : values of protein/ligand solution melting pressure, if input is array
-def PmLtUpper(Lt, dict, param="none", SimParam=qti.app.table("SimParam"), other_params = {}):
+def PmLtUpper(Lt, dict, param="none", SimParam={}, other_params = {}):
 
     Pms = []
     PmAll = []
 
-    qti.app.resultsLog().append(str(dict['xa']))
-    qti.app.resultsLog().append(str(other_params['xa']))
+    
+    #if we do not vary parameters
     if param == "none":
 
         if isinstance(Lt, int) or isinstance(Lt, float):
@@ -365,8 +343,8 @@ def PmLtUpper(Lt, dict, param="none", SimParam=qti.app.table("SimParam"), other_
             PmAll.append(Pms)
             answer = np.array(PmAll)
             return answer
+    #if we vary one or all parameters
     else:
-        SimParam = bp.simParamDict(SimParam)
         for i in SimParam[param]:
             Pms = []
             if param != "none":
@@ -374,18 +352,16 @@ def PmLtUpper(Lt, dict, param="none", SimParam=qti.app.table("SimParam"), other_
                 dict.update({param:i})
 
             if isinstance(Lt, int) or isinstance(Lt, float):
-                Pm = bp.brent(LtUpper, Lt, dict, ii=0, other_params = other_params)
+                Pm = bp.brent(LtUpper, Lt, dict, 0, other_params = other_params)
                 return Pm
             else:
                 for k in range(len(Lt)):
-                    Pm = bp.brent(LtUpper, Lt[k], dict, ii=0, other_params = other_params)
+                    Pm = bp.brent(LtUpper, Lt[k], dict, 0, other_params = other_params)
                     Pms.append(Pm)
             PmAll.append(Pms)
             # update dict to old value
             dict.update({param:old})
         answer = np.array(PmAll)
-
-
         return answer
 
 

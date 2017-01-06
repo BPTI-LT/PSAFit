@@ -60,9 +60,6 @@ class Window(QtGui.QDialog):
         bb1 = QtGui.QPushButton('Delete Fit Graphs', self)
         bb1.clicked.connect(bp.deleteFitGraphs)
         bbox.addWidget(bb1)
-        bb2 = QtGui.QPushButton('Delete Fit Tables', self)
-        bb2.clicked.connect(bp.deleteFitTables)
-        bbox.addWidget(bb2)
         bb3 = QtGui.QPushButton('Delete Fit Graphs and Tables', self)
         bb3.clicked.connect(bp.deleteFitGraphsTables)
         bbox.addWidget(bb3)
@@ -111,7 +108,7 @@ class Window(QtGui.QDialog):
             try:
                 qti.app.resultsLog().append(name)
                 qti.app.updateLog('Fit started \n ')
-                bp.fitPmTm(name)
+                bp.newfitPmTm(name)
 
             except Exception, e:
                 msgBox = QtGui.QMessageBox()

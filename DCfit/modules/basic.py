@@ -30,13 +30,21 @@ import logging
 from PyQt4 import QtCore, QtGui
 from math import exp, log, sqrt
 import scipy.stats as st
+import collections
+from math import log10, floor
 
 '''
 Code below is used for QtiPlot tables and graphs editing
 '''
 
 
-
+def round_sig(x, sig=3):
+    if abs(x) < 0.0000000000001:
+        return x
+    if abs(x) < 1:
+        return round(x, sig-int(floor(log10(abs(x))))-1)
+    else:
+        return round(x, sig)
 
 ## Function for getting QtiPlot tables column names in one string array.
 #  @param inputTable Qti Object table : table for column names reading
@@ -81,6 +89,10 @@ def simParamDict(inputTable = qti.app.table("SimParam")):
 def columnToArray(tablename = ''):
     x = []
     dat = []
+    xcolindexes = []
+    ycolindexes = []
+    xcolnames = []
+    ycolnames = []
     t = qti.app.table(tablename)
     if  not isinstance(t, qti.Table):
         t = qti.app.currentTable()
@@ -93,15 +105,34 @@ def columnToArray(tablename = ''):
     xx = []
     yy = []
     cols = t.selectedColumns()
+    if len(cols) == 0:
+        msgBox = QtGui.QMessageBox()
+        msgBox.setText('There are no selected columns in current table')
+        ret = msgBox.exec_()
+        return
     for k in cols:
         index = t.colIndex(k)
         des = t.colPlotDesignation(index)
         if des == 1:
             xx.append(k)
+            xcolindexes.append(index)
+            xcolnames.append(t.colName(index+1))
         elif des == 2:
             yy.append(k)
+            ycolindexes.append(index)
+            ycolnames.append(t.colName(index+1))
     xy = xx
+    if len(xx) == 0:
+        msgBox = QtGui.QMessageBox()
+        msgBox.setText('There is no column of type X in selected columns.')
+        ret = msgBox.exec_()
+        return
     xy.extend(yy)
+    if len(xy) == 0:
+        msgBox = QtGui.QMessageBox()
+        msgBox.setText('Data in table does not have x column. Please select correct table.')
+        ret = msgBox.exec_()
+        return
     for j in range(t.numRows()):
         empty = 0
         for k in xy:
@@ -123,7 +154,7 @@ def columnToArray(tablename = ''):
             dat.append(data_y)
     x =     np.array(x)
     data = np.array(dat)
-    answer = [x, data]
+    answer = [x, data, [xcolindexes, ycolindexes], [xcolnames, ycolnames]]
     return answer
 
 ## Function for converting QtiPlot table data points to numpy array data points.
@@ -220,7 +251,7 @@ def generatorResultTable(x, data, dict, param = "none", outTableName = "output_t
 #  @param init_table Qti Table Object :  parameters initializing table
 #  @return Dictionary : dictionary for parameters keys and values.
 def initParamsDict(init_table):
-    dict = {}
+    dict = collections.OrderedDict()
     for i in range(1, init_table.numRows()):
         if not emptyCell(init_table, 1, i):
             if not emptyCell(init_table, 2, i):
@@ -241,9 +272,10 @@ def initParamsDict(init_table):
 #  @return List : default return case placed in 0 place, additional return case place in 1 place; then useGlobal=True
 def fitWizardParameters(fit_wiz_table, useGlobal = False, fitvars = {}):
     fit_params = Parameters()
-    dict = {} # local dictionary which is used for creating FitParams - lmfit Parameters object
-    other_params = {} # local dictionary for non fit params
+    dict = collections.OrderedDict() # local dictionary which is used for creating FitParams - lmfit Parameters object
+    other_params = collections.OrderedDict() # local dictionary for non fit params
     globalD = {} # local dictionary which is used for storing information about parameters globality
+    douseGlobal = False
     for i in range(1, fit_wiz_table.numRows()):
         if not emptyCell(fit_wiz_table, 1, i):
             name = fit_wiz_table.cellData(1,i)
@@ -262,16 +294,17 @@ def fitWizardParameters(fit_wiz_table, useGlobal = False, fitvars = {}):
                     dict.update({'vary':False})
                 fit_params.add( name, value = dict['value'], min = dict['min'], max = dict['max'], vary = dict['vary'])
                 if useGlobal:
-                    if emptyCell(fit_wiz_table, 6, i):
+                    if emptyCell(fit_wiz_table, 6, i) or not bool(fit_wiz_table.cell(3,i)):
                         globalD.update({name:False})
                     else:
                         globalD.update({name: bool(fit_wiz_table.cell(6,i))})
+                        douseGlobal = True
             else:
                 other_params[name] = fit_wiz_table.cell(2,i)
-    if useGlobal:
-        return [fit_params, other_params, globalD]
-    else:
-        return [fit_params, other_params]
+    if not douseGlobal:
+        globalD = {}
+    return [fit_params, other_params, globalD]
+  
 
 
 ## Function for generating original table names.
@@ -299,28 +332,17 @@ def existTableName(table_name):
 #  @param funcname Function : mathematical function for mathematical formula ex. Gaussian
 #  @param params LmFit Parameters Object : parameters values
 #  @param experm_table Str : experimental data table name
+#  @param selcolindexes Array : 2D array of indexes of selected columns
 #  @param brent=False Boolean : logic parameter for using Brent's method
 #  @param fitTableName="fit_result_1" Str : output table name
 #  @return Str : name of fit result table
-def fitResult(x, funcname, params, other_params, experm_table, rr, brent = False, fitTableName = "fit_result_1"):
+def fitResult(x, funcname, params, other_params, experm_table, selcolindexes, brent = False, fitTableName = "fit_result_1"):
     fitTableName = existTableName(fitTableName)
-    u = rr[0] + "_"
-    i = 1
-    cols = 1
-    while i != -1:
-        try:
-            params[u +str(i)].value
-            cols = i
-            i = i + 1
-        except:
-            i = -1
+    cols = len(selcolindexes[1])
+    xcol = selcolindexes[0][0]
     t1 = qti.app.newTable(fitTableName, len(x), 2 * cols + 1)
     t2 = experm_table
-    selCols = t2.selectedColumns()
-    sc =[]
-    for k in selCols:
-        index = t2.colIndex(k)
-        sc.append(index)
+    sc = selcolindexes[1]
 
     for i in range(len(x)):
         t1.setCellData(1, i+1, x[i])
@@ -341,20 +363,26 @@ def fitResult(x, funcname, params, other_params, experm_table, rr, brent = False
                 y = bp.brent(funcname, x[i], params, k, other_params)
                 t1.setCellData((k+1) * 2 + 1, i+1, y)
     for i in range(len(x)):
-        for yk, k in enumerate(sc[1:]):
+        for yk, k in enumerate(sc):
             y = t2.cell(k + 1, i+1)
             t1.setCellData((yk + 1) * 2 , i+1, y)
     ##  setting column values
+    t1.setColName(1, t2.colName(xcol + 1))
+     
+    for yi, i in enumerate(sc):
+        value = t2.colName(i + 1)
+        t1.setColName((yi + 1 ) * 2 + 1, 'fit%i' % (yi+1))
+        t1.setColName(yi + 2, value)
+    
+    
+    
     for yi, i in enumerate(sc):
         value = t2.colName(i + 1)
         if not brent:
             t1.setColName(yi + 1, value)
         else:
-            if yi > 0:
-                t1.setColName((yi ) * 2 + 1, 'fit%i' % (yi))
-                t1.setColName( (yi) * 2, value)
-            else:
-                t1.setColName(1, value)
+            t1.setColName((yi  + 1) * 2 + 1, 'fit%i' % (yi + 1))
+            t1.setColName( yi + 2, value)
     return fitTableName
 
 ## Function for QtiPlot graphs editing.
@@ -523,128 +551,156 @@ def Geditor(dict={'editor':True}, fromTable=False, table=qti.app.currentTable())
 
 ## Function for creating LmFit fit output table..
 #  @param minimizer Object : LmFit minimize() function result object
-#  @param inputTable Table : input table
-#  @param fitParams Dict : dictionary with fitting parameters values after fit
-#  @param fitStartParams Array : array with initial fitting parameters values
-#  @param rr 2 D Array : list with fitted parameters
-#  @param data 2D Numpy Array : input y values
-#  @param tName='outputPmFit_1' String : output table name
-#  @param fitRezName='undefined' String : result table name
-#  @param useGlobal=False Boolean : logic parameter for showing globality parameter in the table
-#  @param globalD={} Dictionary : keys and values of globality parameters
+#  @param dict Dict : dictionary with varios parameters values after fit
 #  @return Qti Table Object : output table
-def outputTable(minimizer, inputTable, fitParams, fitStartParams, rr, data, tName = 'outputPmFit_1', fitRezName = 'undefined',useGlobal = False, globalD = {}):
-    tName = existTableName(tName)
-    mm = [minimizer.nfev,
-            minimizer.errorbars,
-            minimizer.message,
-            minimizer.ier,
-            minimizer.nvarys,
-            minimizer.ndata,
-            minimizer.nfree,
-            minimizer.chisqr,
-            minimizer.redchi,
-            inputTable.objectName(),
-            tName,
-            fitRezName,
-            time.strftime("%Y-%m-%d %H:%M:%S") ]
+def outputTable(minimizer, dict):
+# fitParams, fitStartParams, rr, data, tName = 'outputPmFit_1', fitRezName = 'undefined',useGlobal = False, globalD = {}):
 
-    nn = ['nfev',
-            'errorbars',
-            'message',
-            'ier',
-            'nvarys',
-            'ndata',
-            'nfree',
-            'chisqr',
-            'redchi',
-            'input table',
-            'output table',
-            'fit_result',
-            'date/time']
+    ndata = len(dict['yNames'])
+    #minimiserresult parameters
+    mm = collections.OrderedDict()
+    mm['Lmfit results'] = ''
+    mm['nfev'] = minimizer.nfev
+    mm['success'] = minimizer.success
+    mm['errorbars'] = minimizer.errorbars
+    mm['message'] = minimizer.message
+    mm['ier'] = minimizer.ier
+    mm['lmdif_message'] = minimizer.lmdif_message
+    mm['nvarys'] = minimizer.nvarys
+    mm['ndata'] = minimizer.ndata
+    mm['nfree'] = minimizer.nfree
+    mm['-----'] = ''
+    mm['Fit statistics:'] = ''
+    mm['chisqr'] = round_sig(minimizer.chisqr,3)
+    mm['redchi'] = round_sig(minimizer.redchi,3)
+    mm['aic'] = round_sig(minimizer.aic,3)
+    mm['bic'] = round_sig(minimizer.bic, 3)
+         
+    if ndata == 1:
+        mm['R^2'] = round_sig(dict['r2'][0], 3)
+        mm['P'] = round_sig(dict['p_values'][0], 3)
 
-    kk = ['mnmzize_p',
-            'mnmzize_p_v',
+        
+    mm['------'] = ''    
+    mm['Other information'] = ''
+    mm['input table'] = dict['intable']
+    mm['output table'] = dict['outtable']
+    mm['fit result table'] = dict['fittable']
+    mm['date/time'] = time.strftime("%Y-%m-%d %H:%M:%S") 
+    kk = ['lmfit var',
+            'lmfit val',
             '',
             'fit param',
             'value',
             'min',
             'max',
-            'vary']
-    if useGlobal: # additional column named 'global' if useGlobal is True
-        kk.append('global')
-
-    ndata, nx = data.shape
-    rows = len(rr[1])
-    if rows < len(nn):
-        rows = len(nn)
-    outputTable = qti.app.newTable(tName, rows, 9 + 3 * ndata + useGlobal)
+            'vary',
+            'global']
+    
+    gener = {}
+    genval = 2
+    
+    rr = dict['fitvars']
+    fitvarsnumber = len(rr)
+    tName = dict['outtable']
+    fitStartParams = dict['initialvals']
+    other_params = dict['otherparams']
+    rows = 50
+    globalD = dict['globalD']
+    if len(globalD) > 0:
+        useGlobal = True
+    else:
+        useGlobal = False
+    
+    #writes parameters used to generate curves
+    '''inc = inputTable.colNames()
+    if inputTable.objectName() == 'Example' and 'initPar' in inc and 'value' in inc:
+        genval = 3
+        for row in range(1, inputTable.numRows() + 1):
+            if not emptyCell(inputTable, 'value', row):
+                key = inputTable.cellData('initPar', row)
+                value = inputTable.cellData('value', row)
+                if key in rr:
+                    gener.update({key:value})
+                    '''
+    names = dict['yNames']
+    outputTable = qti.app.newTable(tName, rows, 10 + genval * ndata)
     ##parameters names in first column
     outputTable.setColTextFormat(1)
     outputTable.setColName(1, 'param')
-    for yi, y in enumerate(rr[1]):
+    for yi, y in enumerate(rr):
         outputTable.setText(1, yi+1, y)
+    if ndata > 1:
+        outputTable.setText(1, fitvarsnumber + 2, 'Individual statistics of fit')
+        outputTable.setText(1, fitvarsnumber + 3, 'R^2')
+        outputTable.setText(1, fitvarsnumber + 4, 'P')
+        outputTable.setText(1, fitvarsnumber + 5, 'chisqr')
+        outputTable.setText(1, fitvarsnumber + 6, 'redchi')
+        offset = fitvarsnumber + 6
+    else:
+        offset = fitvarsnumber
 
-    ## values of input curves generating parameters
-    # reading
-    gener = {}
-    for col in range(1, inputTable.numCols()):
-        for row in range(1, inputTable.numRows() + 1):
-            if not emptyCell(inputTable, col+1, row):
-                key = inputTable.cellData(col, row)
-                value = inputTable.cellData(col + 1, row)
-
-                if key in rr[1]:
-                    gener.update({key:value})
-
-    # writing
-
-    scols = inputTable.selectedYColumns()
-    names = []
-    for i in scols:
-        index = inputTable.colIndex(i)
-        k = inputTable.colName(index+1)
-        names.append(k)
-    for cols in range(ndata):
-        outputTable.setColName((cols) * 3 + 2, names[cols])
-        for yi, y in enumerate(rr[1]):
-            try:
-                value = gener[y]
-                outputTable.setCellData((cols) * 3 + 2, yi + 1, value)
-            except KeyError:
-                continue
+        
+    '''
+    if genval == 3:
+        for cols in range(ndata):
+            outputTable.setColName((cols) * genval + 2, names[cols])
+            
+            for yi, y in enumerate(rr):
+                try:
+                    value = gener[y]
+                    outputTable.setCellData((cols) * genval + 2, yi + 1, value)
+                except KeyError:
+                    continue
+                    '''
     ## fitted parameters values
-    rez = fitParams.valuesdict()
+    rez = minimizer.params.valuesdict()
     for cols in range(ndata):
-        outputTable.setColName((cols) * 3 + 3, 'fit_' + str(cols + 1))
-        for yi, y in enumerate(rr[1]):
+        if genval == 3:
+            outputTable.setColName((cols) * genval + genval, 'fit_' + str(cols + 1))
+        else:
+            outputTable.setColName((cols) * genval + 2, names[cols])
+        for yi, y in enumerate(rr):
             y = y + '_' + str(cols + 1)
             try:
                 value = rez[y]
-                outputTable.setCellData((cols) * 3 + 3, yi + 1, value)
+                outputTable.setCellData((cols) * genval + genval, yi + 1, round_sig(value))
             except KeyError:
                 continue
+        if ndata > 1:
+            outputTable.setCellData((cols) * genval + genval, fitvarsnumber + 3, round_sig(dict['r2'][cols], 4))
+            outputTable.setCellData((cols) * genval + genval, fitvarsnumber + 4, round_sig(dict['p_values'][cols],3))
+            outputTable.setCellData((cols) * genval + genval, fitvarsnumber + 5, round_sig(dict['chi_sqr'] [cols], 3))
+            outputTable.setCellData((cols) * genval + genval, fitvarsnumber + 6, round_sig(dict['red_chi'][cols], 3))
+
+    ## other parameters
+    outputTable.setText(1, offset + 2, 'Other parameters')
+    for yi, y in enumerate(other_params.keys()):
+        outputTable.setText(1, offset + 3 + yi, y)
+        outputTable.setCellData(2, offset + 3 + yi, other_params[y])
+    
+    
     ## adding minimize parameters
-    outputTable.setColTextFormat(ndata * 3 + 2)
-    outputTable.setColTextFormat(ndata *3 + 3)
-    for yi, y in enumerate(nn):
-        outputTable.setCellData((ndata) * 3 + 2, yi + 1, y)
-    for yi, y in enumerate(mm):
-        outputTable.setCellData((ndata) * 3 + 3, yi + 1, y)
+    outputTable.setColTextFormat(ndata * genval + 2)
+    outputTable.setColTextFormat(ndata *genval + 3)
+    for yi, y in enumerate(mm.keys()):
+        outputTable.setCellData((ndata) * genval + 2, yi + 1, y)
+        outputTable.setCellData((ndata) * genval + 3, yi + 1, mm[y])
+
     ## adding fitting parameters
-    fitStartParams
-    outputTable.setColTextFormat(ndata *3 + 5)
+    #fitStartParams
+    outputTable.setColTextFormat(ndata *genval + 5)
     for yi, y in enumerate(fitStartParams):
-        outputTable.setCellData((ndata) * 3 + 5 + yi % 5, yi/5 + 1, y)
+        outputTable.setCellData((ndata) * genval + 5 + yi % 5, yi/5 + 1, y)
     if useGlobal:
-        for yi, name in enumerate(rr[0]):
+        for yi, name in enumerate(rr):
             try:
-                outputTable.setCellData((ndata) * 3 + 5 + 5, yi + 1, globalD[name] )
+                outputTable.setCellData((ndata) * genval + 5 + 5, yi + 1, globalD[name] )
             except KeyError:
-                outputTable.setCellData((ndata) * 3 + 5 + 5, yi + 1, False)
+                outputTable.setCellData((ndata) * genval + 5 + 5, yi + 1, False)
     ## naming columns
     for yi, y in  enumerate(kk):
-        outputTable.setColName((ndata) * 3 + 2 + yi, y)
+        outputTable.setColName((ndata) * genval + 2 + yi, y)
     return qti.app.currentTable()
 
 ## Function for doing logarithmic(10) derivative dy/d(log(x)) on selected QtiPlot table columns.
@@ -729,7 +785,7 @@ def outTabDeriv(paramDict, param = "default", initParams = {}, simParams = qti.a
     ## setting column names
     for yi, y in enumerate(kk):
         outputTable.setColName(yi + 1, y)
-
+    return tName
 ## Function for generating original table names.
 #  @param graphName Str : name for checking
 #  @return  Str : original table name
@@ -757,45 +813,42 @@ def existGraphName(graphName):
 #  @param funcname Function : mathematical function for mathematical formula ex. Gaussian
 #  @param params Object : parameters values
 #  @param experm_table Str : experimental data table name
+#  @param selcolindexes Array : 2D array of indexes of selected columns
 #  @param fitTableName="fit_result_1" String : output table name
 #  @return Str : name of fit result table
-def fitResultElip(x, funcname, params, other_params, experm_table, rr, fitTableName = "fit_result_1"):
+def fitResultElip(x, funcname, params, other_params, experm_table, selcolindexes, fitTableName = "fit_result_1"):
     fitTableName = existTableName(fitTableName)
-    u = rr[0] + "_"
-    i = 1
-    cols = 1
-    while i != -1:
-        try:
-            params[u +str(i)].value
-            cols = i
-            i = i + 1
-        except:
-            i = -1
+    cols = len(selcolindexes[1])
+    xcol = selcolindexes[0][0]
     t1 = qti.app.newTable(fitTableName, len(x), 2 * cols + 1)
     t2 = experm_table
-    selCols = t2.selectedColumns()
-    sc =[]
-    for k in selCols:
-        index = t2.colIndex(k)
-        sc.append(index)
-
+    #selCols = t2.selectedColumns()
+    #sc = selcolindexes
+    # sc = []
+    # for k in selCols:
+        # index = t2.colIndex(k)
+        # sc.append(index)
+    qti.app.updateLog('cols = ' +str(cols)+' \n ') 
+    sc = selcolindexes[1]
     for i in range(len(x)):
         t1.setCellData(1, i+1, x[i])
         for k in range(cols):
-            if i == 0 or (i > 0 and x[i] >= x[i-1]):
-                y = funcname(params, x[i], i = k, other_params = other_params)['Pm1']
-            elif i > 0 and x[i] < x[i-1]:
-                y = funcname(params, x[i], i = k, other_params = other_params)['Pm1']
+            #if i == 0 or (i > 0 and x[i] >= x[i-1]):
+              #  y = funcname(params, x[i], k, other_params)
+            #elif i > 0 and x[i] < x[i-1]:
+               # y = funcname(params, x[i], k, other_params)
+            y = funcname(params, x[i], k, other_params)
             t1.setCellData((k+1) * 2 + 1, i+1, y)
     for i in range(len(x)):
-        for yk, k in enumerate(sc[1:]):
+        for yk, k in enumerate(sc):
             y = t2.cell(k + 1, i+1)
             t1.setCellData((yk + 1) * 2 , i+1, y)
     ##  setting column values
+    t1.setColName(1, t2.colName(xcol + 1))
     for yi, i in enumerate(sc):
         value = t2.colName(i + 1)
-        t1.setColName((yi ) * 2 + 1, 'fit%i' % (yi))
-        t1.setColName(yi + 1, value)
+        t1.setColName((yi + 1 ) * 2 + 1, 'fit%i' % (yi+1))
+        t1.setColName(yi + 2, value)
     return fitTableName
 
 ## Function for deleting all graphs.
@@ -963,7 +1016,8 @@ def brent(func, y0, dict, ii=0, other_params = {}):
         if(abs(fa) < abs(fb)):
             xa, xb = xb, xa
             fa, fb = fb, fa
-
+    #qti.app.updateLog('Lt: ' + str("%.4g"%y0) + '\n')
+    #qti.app.updateLog('Pm: ' + str("%.4g"%xs) + '\n')
     return xs
 
 ## Function for calculating R^2 in the QtiPlot table.
@@ -1161,7 +1215,10 @@ def runs_test(table):
         e_v = 2 * res_neg * res_pos * \
             (2 * res_neg * res_pos - res_pos - res_neg) \
             / (((res_pos + res_neg)**2) * (res_pos + res_neg - 1))
-        z_sd = (seq_num - e_r) / sqrt(e_v)
+        if e_v != 0:
+		    z_sd = (seq_num - e_r) / sqrt(e_v)
+        else:
+            z_sd = 100000000000000
         p_prob = 2 * st.norm.sf(abs(z_sd))
         answer.append(p_prob)
         i = i + 2
@@ -1188,8 +1245,34 @@ def chi_squares(table, n_varys):
 ## Fuction for adding values to Qtiplot's resultsLog
 #  @param log_inform=dict Float : amplitude of white noise
 def results_logger(log_inform=dict):
-    qti.app.updateLog('\n')
-    qti.app.updateLog("Date: " +time.strftime("%Y-%m-%d %H:%M:%S") + '\n')
+    qti.app.resultsLog().append('\n')
+    qti.app.resultsLog().append("Date: " +time.strftime("%Y-%m-%d %H:%M:%S") + '\n')
     if log_inform != {}:
         for key, value in log_inform.items():
-            qti.app.updateLog(key + ": " +str(value) + '\n')
+            qti.app.resultsLog().append(key + ": " +str(value) + '\n')
+
+            
+## Function for one Gaus model.
+#  @param dict Dictionary : Pm function arguments
+#  @param dict['xMin'] Float : minimum value
+#  @param dict['xMax'] Float : maximum value
+#  @param dict['rate'] Int :  sample rate
+#  @param scale='log10' String : step scale
+#  @return numpy 1D array : list of steped values
+def xGen(dict, scale = 'log10'):
+    xMin = dict['Lt_min']
+    xMax = dict['Lt_max']
+    rate = dict['Lt_range']
+    answer = []
+    b1 = log(xMin, 10)
+    b2 = log(xMax, 10)
+    if scale == 'log10':
+        for i in range(int(rate)):
+            value = 10 ** (b1 + (i) * (b2 - b1) / (rate - 1.))
+            answer.append(value)
+    elif scale == 'linear':
+        for i in range(int(rate)):
+            value = xMin + i*(xMax-xMin)/(rate-1.)
+            answer.append(value)
+    answer = np.array(answer)
+    return answer

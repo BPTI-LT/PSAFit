@@ -38,26 +38,62 @@ message = {'basic':'checking',
                         'PmLt':'checking',
                         'genPmLt':'checking',
                         'fitPmLt':'checking',
-                        'fitPmTm':'checking'                            }
+                        'fitPmTm':'checking',
+                        'genPmTm':'checking',
+                        'PmTm':'checking'
+
+                        }
+deploy  = 0
+if deploy == 1:
+    import basic
+    reload (basic)
 from basic import*
 
 try:
+    if deploy == 1:
+        import PmLt
+        reload (PmLt)
     from PmLt import*
     message.update({'PmLt':'imported'})
 except ImportError:
     message.update({'PmLt':'no module'})
 try:
+    if deploy == 1:
+        import genPmLt
+        reload (genPmLt)
     from genPmLt import*
     message.update({'genPmLt':'imported'})
 except ImportError:
     message.update({'genPmLt':'no module'})
 try:
+    if deploy == 1:
+        import fitPmLt
+        reload (fitPmLt)
     from fitPmLt import*
     message.update({'fitPmLt':'imported'})
 except ImportError:
     message.update({'fitPmLt':'no module'})
 try:
+    # if deploy == 1:
+        # import genPmTm
+        # reload (genPmTm)
+    from genPmTm import*
+    message.update({'genPmTm':'imported'})
+except ImportError:
+    message.update({'genPmTm':'no module'})
+try:
+    '''if deploy == 1:
+        import fitPmTm
+        reload (fitPmTm)'''
     from fitPmTm import*
     message.update({'fitPmTm':'imported'})
 except ImportError:
     message.update({'fitPmTm':'no module'})
+try:
+    '''if deploy == 1:
+        import PmTm
+        reload (PmTm)'''
+    from PmTm import*
+    message.update({'PmTm':'imported'})
+except ImportError:
+    message.update({'PmTm':'no module'})
